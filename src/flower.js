@@ -88,67 +88,60 @@ export class FlowerSystem {
       
       // 2. Calculate and Draw Petals if grown enough
       if (growFactor > 0.1) {
-        ctx.shadowBlur = 20 * bloomFactor;
-        ctx.shadowColor = `hsl(${f.colorHue}, 100%, 60%)`;
+        // We'll draw 5 sharp petals like a faceted lotus
+        const angles = [-0.6, -0.3, 0, 0.3, 0.6]; 
+        const petalLength = 80 + 200 * bloomFactor;
+        const petalWidth = 20 + 40 * bloomFactor;
         
-        const numPetals = 7;
-        const petalLength = 50 + 150 * bloomFactor;
-        const petalWidth = 10 + 35 * bloomFactor;
+        ctx.save();
+        ctx.translate(endX, endY);
         
-        for(let p = 0; p < numPetals; p++) {
-          // Petals spread out based on bloomFactor
-          const spread = Math.PI * 0.8 * bloomFactor; 
-          
-          ctx.save();
-          ctx.translate(endX, endY);
-          
-          // Base rotation for the flower pointing up, slightly angled by sway
-          const flowerAngle = Math.atan2(endY - cp2Y, endX - cp2X) + Math.PI/2;
-          ctx.rotate(flowerAngle);
-          
-          // Spread petals
-          const petalAngle = -spread/2 + (spread / (numPetals-1 || 1)) * p;
-          ctx.rotate(petalAngle);
-          
-          // Draw geometric/sharp Petal (diamond/kite shape)
-          ctx.beginPath();
-          ctx.moveTo(0, 0); // Base
-          ctx.lineTo(-petalWidth / 2, -petalLength * 0.25); // Left point
-          ctx.lineTo(0, -petalLength); // Tip
-          ctx.lineTo(petalWidth / 2, -petalLength * 0.25); // Right point
-          ctx.closePath();
-          
-          // Gradient for realism/glowing light effect
-          const gradient = ctx.createLinearGradient(0, 0, 0, -petalLength);
-          gradient.addColorStop(0, '#fff'); // White glowing base
-          gradient.addColorStop(0.2, `hsl(${f.colorHue}, 100%, 65%)`);
-          gradient.addColorStop(1, `hsla(${f.colorHue}, 100%, 50%, 0)`); // Fade to transparent at tip
-          
-          ctx.fillStyle = gradient;
-          ctx.shadowBlur = 15 * bloomFactor;
-          ctx.shadowColor = `hsl(${f.colorHue}, 100%, 50%)`;
-          ctx.fill();
-          
-          // Inner bright structural line
-          ctx.beginPath();
-          ctx.moveTo(0, 0);
-          ctx.lineTo(0, -petalLength * 0.8);
-          ctx.strokeStyle = `hsla(0, 0%, 100%, ${0.6 + 0.4 * bloomFactor})`;
-          ctx.lineWidth = 1.5;
-          ctx.shadowBlur = 10;
-          ctx.shadowColor = '#fff';
-          ctx.stroke();
-          
-          ctx.restore();
+        // Base rotation for the flower pointing up, slightly angled by sway
+        const flowerAngle = Math.atan2(endY - cp2Y, endX - cp2X) + Math.PI/2;
+        ctx.rotate(flowerAngle);
+        
+        // Draw back petals first, then front
+        const drawOrder = [0, 4, 1, 3, 2];
+        
+        for (let idx of drawOrder) {
+           const baseAngle = angles[idx];
+           // Spread out based on bloom factor
+           const spreadAngle = baseAngle * (0.2 + 0.8 * bloomFactor);
+           
+           ctx.save();
+           ctx.rotate(spreadAngle);
+           
+           // Draw simple sharp triangle for petal
+           ctx.beginPath();
+           ctx.moveTo(0, 0); // Base
+           ctx.lineTo(-petalWidth/2, -petalLength * 0.4); // Left point
+           ctx.lineTo(0, -petalLength); // Tip
+           ctx.lineTo(petalWidth/2, -petalLength * 0.4); // Right point
+           ctx.closePath();
+           
+           // Faceted gradient
+           const gradient = ctx.createLinearGradient(0, 0, 0, -petalLength);
+           gradient.addColorStop(0, '#fff'); // White base
+           gradient.addColorStop(0.3, `hsl(${f.colorHue}, 100%, 65%)`); // Bright pink/red
+           gradient.addColorStop(1, `hsla(${f.colorHue}, 100%, 40%, 0.5)`); // Darker semi-transparent tip
+           
+           ctx.fillStyle = gradient;
+           ctx.shadowBlur = 10 * bloomFactor;
+           ctx.shadowColor = `hsl(${f.colorHue}, 100%, 50%)`;
+           ctx.fill();
+           
+           // Inner bright structure line
+           ctx.beginPath();
+           ctx.moveTo(0, 0);
+           ctx.lineTo(0, -petalLength * 0.9);
+           ctx.strokeStyle = `hsla(0, 0%, 100%, ${0.5 + 0.5 * bloomFactor})`;
+           ctx.lineWidth = 2;
+           ctx.stroke();
+           
+           ctx.restore();
         }
         
-        // Center core glowing orb
-        ctx.beginPath();
-        ctx.arc(endX, endY, 3 + 6 * bloomFactor, 0, Math.PI * 2);
-        ctx.fillStyle = '#fff';
-        ctx.shadowBlur = 20;
-        ctx.shadowColor = `hsl(${f.colorHue}, 100%, 80%)`;
-        ctx.fill();
+        ctx.restore();
       }
     }
     
