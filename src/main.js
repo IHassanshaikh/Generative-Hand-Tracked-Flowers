@@ -94,6 +94,7 @@ async function predictWebcam() {
     
     // Perform detection
     const results = handLandmarker.detectForVideo(video, startTimeMs);
+    window.lastResults = results; // Save for UI rendering later
     
     let targetGrow = currentGrow; // Maintain current if hands lost
     let targetBloom = currentBloom;
@@ -136,6 +137,61 @@ async function predictWebcam() {
 
   // Draw generative graphics
   flowerSystem.draw(currentGrow, currentBloom);
+
+  if (lastVideoTime === video.currentTime) {
+      // Need results in scope to draw UI, so let's just do it inside the main block.
+  }
+
+  // Draw UI overlay if we have results
+  if (window.lastResults && window.lastResults.landmarks) {
+    ctx.save();
+    const w = canvas.width;
+    const h = canvas.height;
+    
+    for (let i = 0; i < window.lastResults.landmarks.length; i++) {
+       const landmarks = window.lastResults.landmarks[i];
+       const thumb = landmarks[4];
+       const index = landmarks[8];
+       
+       const tx = thumb.x * w;
+       const ty = thumb.y * h;
+       const ix = index.x * w;
+       const iy = index.y * h;
+       
+       ctx.beginPath();
+       ctx.moveTo(tx, ty);
+       ctx.lineTo(ix, iy);
+       ctx.strokeStyle = '#2563eb'; // Blue line
+       ctx.lineWidth = 3;
+       ctx.shadowBlur = 10;
+       ctx.shadowColor = '#2563eb';
+       ctx.stroke();
+       
+       // Perpendicular ticks
+       const dx = ix - tx;
+       const dy = iy - ty;
+       const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+       const nx = (-dy / dist) * 15;
+       const ny = (dx / dist) * 15;
+       
+       ctx.beginPath();
+       ctx.moveTo(tx - nx, ty - ny);
+       ctx.lineTo(tx + nx, ty + ny);
+       ctx.moveTo(ix - nx, iy - ny);
+       ctx.lineTo(ix + nx, iy + ny);
+       ctx.stroke();
+       
+       // Text
+       ctx.font = '24px monospace';
+       ctx.fillStyle = '#60a5fa';
+       ctx.shadowBlur = 5;
+       ctx.shadowColor = '#000';
+       let val = i === 0 ? currentGrow : currentBloom;
+       let label = i === 0 ? "Grow" : "Bloom";
+       ctx.fillText(`${label}: ${val.toFixed(2)}`, ix + 20, iy);
+    }
+    ctx.restore();
+  }
 
   // Call this function again to keep predicting when the browser is ready.
   if (webcamRunning === true) {
