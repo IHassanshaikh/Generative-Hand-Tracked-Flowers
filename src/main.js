@@ -158,37 +158,59 @@ async function predictWebcam() {
        const ix = index.x * w;
        const iy = index.y * h;
        
+       // High-tech dashed measurement line
        ctx.beginPath();
        ctx.moveTo(tx, ty);
        ctx.lineTo(ix, iy);
-       ctx.strokeStyle = '#2563eb'; // Blue line
-       ctx.lineWidth = 3;
-       ctx.shadowBlur = 10;
-       ctx.shadowColor = '#2563eb';
+       ctx.strokeStyle = 'rgba(0, 255, 255, 0.6)';
+       ctx.lineWidth = 2;
+       ctx.setLineDash([8, 8]);
        ctx.stroke();
+       ctx.setLineDash([]);
        
-       // Perpendicular ticks
-       const dx = ix - tx;
-       const dy = iy - ty;
-       const dist = Math.sqrt(dx*dx + dy*dy) || 1;
-       const nx = (-dy / dist) * 15;
-       const ny = (dx / dist) * 15;
+       // Tech crosshairs at finger tips
+       const drawCrosshair = (x, y) => {
+          ctx.beginPath();
+          ctx.arc(x, y, 12, 0, Math.PI*2);
+          ctx.strokeStyle = 'rgba(0, 255, 255, 0.9)';
+          ctx.lineWidth = 1.5;
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = '#0ff';
+          ctx.stroke();
+          
+          ctx.beginPath();
+          ctx.moveTo(x - 18, y); ctx.lineTo(x + 18, y);
+          ctx.moveTo(x, y - 18); ctx.lineTo(x, y + 18);
+          ctx.lineWidth = 1;
+          ctx.stroke();
+       };
+       drawCrosshair(tx, ty);
+       drawCrosshair(ix, iy);
        
+       // Premium HUD Data Box
+       const val = (i === 0 ? currentGrow : currentBloom).toFixed(3);
+       const label = i === 0 ? "GROW.FACTOR" : "BLOOM.INTENSITY";
+       const textX = ix + 30;
+       const textY = iy - 10;
+       
+       ctx.fillStyle = 'rgba(0, 15, 30, 0.7)';
+       ctx.strokeStyle = 'rgba(0, 255, 255, 0.6)';
+       ctx.lineWidth = 1;
        ctx.beginPath();
-       ctx.moveTo(tx - nx, ty - ny);
-       ctx.lineTo(tx + nx, ty + ny);
-       ctx.moveTo(ix - nx, iy - ny);
-       ctx.lineTo(ix + nx, iy + ny);
+       ctx.rect(textX, textY - 25, 200, 50);
+       ctx.fill();
        ctx.stroke();
        
-       // Text
-       ctx.font = '24px monospace';
-       ctx.fillStyle = '#60a5fa';
-       ctx.shadowBlur = 5;
-       ctx.shadowColor = '#000';
-       let val = i === 0 ? currentGrow : currentBloom;
-       let label = i === 0 ? "Grow" : "Bloom";
-       ctx.fillText(`${label}: ${val.toFixed(2)}`, ix + 20, iy);
+       // HUD text
+       ctx.font = '14px "Courier New", Courier, monospace';
+       ctx.fillStyle = '#0ff';
+       ctx.shadowBlur = 10;
+       ctx.shadowColor = '#0ff';
+       ctx.fillText(`SYS.${label}`, textX + 10, textY - 5);
+       
+       ctx.font = 'bold 22px "Courier New", Courier, monospace';
+       ctx.fillStyle = '#fff';
+       ctx.fillText(`[${val}]`, textX + 10, textY + 18);
     }
     ctx.restore();
   }

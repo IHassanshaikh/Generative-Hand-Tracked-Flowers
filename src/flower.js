@@ -10,17 +10,18 @@ export class FlowerSystem {
     this.virtualHeight = 720;
     
     this.flowers = [];
+    this.particles = [];
     
     // Create a few flowers with base positions
-    const numFlowers = 5;
+    const numFlowers = 6;
     for (let i = 0; i < numFlowers; i++) {
       this.flowers.push({
-        baseX: this.virtualWidth * (0.2 + (i / numFlowers) * 0.6),
-        baseY: this.virtualHeight + 50, // Start slightly below screen
-        targetHeight: this.virtualHeight * 0.4 + Math.random() * this.virtualHeight * 0.3,
+        baseX: this.virtualWidth * (0.15 + (i / numFlowers) * 0.7),
+        baseY: this.virtualHeight + 100, // Start slightly below screen
+        targetHeight: this.virtualHeight * 0.4 + Math.random() * this.virtualHeight * 0.4,
         swayOffset: Math.random() * Math.PI * 2,
-        swaySpeed: 0.02 + Math.random() * 0.02,
-        colorHue: 330 + Math.random() * 40, // Pinks and reds
+        swaySpeed: 0.015 + Math.random() * 0.015,
+        colorHue: 300 + Math.random() * 60, // Deep purples, pinks, magentas
       });
     }
   }
@@ -28,6 +29,18 @@ export class FlowerSystem {
   resize(width, height) {
     this.canvas.width = width;
     this.canvas.height = height;
+  }
+  
+  emitParticle(x, y, hue) {
+     if(Math.random() > 0.3) return; // limit emission rate
+     this.particles.push({
+        x: x,
+        y: y,
+        vx: (Math.random() - 0.5) * 4,
+        vy: (Math.random() - 0.5) * 4 - 2,
+        life: 1.0,
+        hue: hue
+     });
   }
 
   draw(growFactor, bloomFactor) {
@@ -37,23 +50,25 @@ export class FlowerSystem {
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
+    // Enable additive blending for intense glow
+    ctx.globalCompositeOperation = 'lighter';
+    
     // Scale context to fit virtual resolution into actual canvas
     ctx.save();
     const scaleX = canvas.width / virtualWidth;
     const scaleY = canvas.height / virtualHeight;
-    // We'll use uniform scaling based on height to keep aspect ratio of flowers
     const scale = Math.max(scaleX, scaleY);
     ctx.scale(scale, scale);
     
-    // Center it horizontally if scaling makes it wider
     const xOffset = (canvas.width - virtualWidth * scale) / 2 / scale;
     ctx.translate(xOffset, 0);
 
     // Draw flowers
     for (const f of this.flowers) {
-      // 1. Calculate Stem
       const currentHeight = f.targetHeight * growFactor;
-      const sway = Math.sin(time * f.swaySpeed + f.swayOffset) * 50 * growFactor;
+      if (currentHeight < 1) continue;
+      
+      const sway = Math.sin(time * f.swaySpeed + f.swayOffset) * 80 * growFactor;
       
       const startX = f.baseX;
       const startY = f.baseY;
@@ -62,89 +77,127 @@ export class FlowerSystem {
       const endY = startY - currentHeight;
       
       const cp1X = startX;
-      const cp1Y = startY - currentHeight * 0.5;
-      const cp2X = endX;
-      const cp2Y = endY + currentHeight * 0.2;
+      const cp1Y = startY - currentHeight * 0.3;
+      const cp2X = endX - sway * 0.5;
+      const cp2Y = endY + currentHeight * 0.3;
 
-      // Draw Stem (Straight/Wireframe look)
+      // Pulse effect for energy
+      const energyPulse = Math.sin(time * 3 + f.swayOffset) * 0.5 + 0.5;
+      
+      // Draw Stem (Energy Vine)
       ctx.beginPath();
       ctx.moveTo(startX, startY);
-      
-      // We still use bezier but make it look more like a glowing light beam
       ctx.bezierCurveTo(cp1X, cp1Y, cp2X, cp2Y, endX, endY);
       
-      // Neon glow effect for stem
-      ctx.strokeStyle = `hsl(210, 100%, 75%)`; // Light blue wireframe stem
-      ctx.lineWidth = 2 + 1.5 * growFactor;
-      ctx.shadowBlur = 20;
-      ctx.shadowColor = `hsl(210, 100%, 60%)`;
+      // Outer glow
+      ctx.strokeStyle = `hsla(${f.colorHue - 40}, 100%, 50%, ${0.5 + 0.3 * energyPulse})`; 
+      ctx.lineWidth = 10 + 5 * growFactor;
+      ctx.shadowBlur = 30;
+      ctx.shadowColor = `hsl(${f.colorHue - 40}, 100%, 50%)`;
       ctx.stroke();
       
-      // Draw a subtle core line for the stem
+      // Inner energy core
       ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 1;
-      ctx.shadowBlur = 5;
+      ctx.lineWidth = 2 + 2 * growFactor;
+      ctx.shadowBlur = 10;
       ctx.stroke();
       
-      // 2. Calculate and Draw Petals if grown enough
+      // Calculate and Draw Petals
       if (growFactor > 0.1) {
-        // We'll draw 5 sharp petals like a faceted lotus
-        const angles = [-0.6, -0.3, 0, 0.3, 0.6]; 
-        const petalLength = 80 + 200 * bloomFactor;
-        const petalWidth = 20 + 40 * bloomFactor;
+        
+        const numPetals = 8;
+        const baseLength = 80 + 150 * bloomFactor;
+        
+        // Emit particles from core if blooming
+        if (bloomFactor > 0.5) {
+           this.emitParticle(endX, endY, f.colorHue);
+        }
         
         ctx.save();
         ctx.translate(endX, endY);
         
-        // Base rotation for the flower pointing up, slightly angled by sway
         const flowerAngle = Math.atan2(endY - cp2Y, endX - cp2X) + Math.PI/2;
         ctx.rotate(flowerAngle);
         
-        // Draw back petals first, then front
-        const drawOrder = [0, 4, 1, 3, 2];
-        
-        for (let idx of drawOrder) {
-           const baseAngle = angles[idx];
-           // Spread out based on bloom factor
-           const spreadAngle = baseAngle * (0.2 + 0.8 * bloomFactor);
-           
-           ctx.save();
-           ctx.rotate(spreadAngle);
-           
-           // Draw simple sharp triangle for petal
-           ctx.beginPath();
-           ctx.moveTo(0, 0); // Base
-           ctx.lineTo(-petalWidth/2, -petalLength * 0.4); // Left point
-           ctx.lineTo(0, -petalLength); // Tip
-           ctx.lineTo(petalWidth/2, -petalLength * 0.4); // Right point
-           ctx.closePath();
-           
-           // Faceted gradient
-           const gradient = ctx.createLinearGradient(0, 0, 0, -petalLength);
-           gradient.addColorStop(0, '#fff'); // White base
-           gradient.addColorStop(0.3, `hsl(${f.colorHue}, 100%, 65%)`); // Bright pink/red
-           gradient.addColorStop(1, `hsla(${f.colorHue}, 100%, 40%, 0.5)`); // Darker semi-transparent tip
-           
-           ctx.fillStyle = gradient;
-           ctx.shadowBlur = 10 * bloomFactor;
-           ctx.shadowColor = `hsl(${f.colorHue}, 100%, 50%)`;
-           ctx.fill();
-           
-           // Inner bright structure line
-           ctx.beginPath();
-           ctx.moveTo(0, 0);
-           ctx.lineTo(0, -petalLength * 0.9);
-           ctx.strokeStyle = `hsla(0, 0%, 100%, ${0.5 + 0.5 * bloomFactor})`;
-           ctx.lineWidth = 2;
-           ctx.stroke();
-           
-           ctx.restore();
+        // Draw multiple layers of petals for depth
+        for(let layer = 0; layer < 2; layer++) {
+            const layerScale = layer === 0 ? 1 : 0.6; // Inner petals are smaller
+            const layerAlpha = layer === 0 ? 0.6 : 0.9;
+            const layerRotOffset = layer === 0 ? 0 : Math.PI / numPetals;
+            
+            for(let p = 0; p < numPetals; p++) {
+              const baseRot = (Math.PI * 2 / numPetals) * p + layerRotOffset + time * 0.1 * (layer === 0 ? 1 : -1);
+              
+              // Spread petals outward organically
+              const targetAngle = baseRot * bloomFactor;
+              
+              ctx.save();
+              ctx.rotate(targetAngle);
+              
+              const pLength = baseLength * layerScale;
+              
+              // Draw ethereal energy petal (flame/teardrop shape)
+              ctx.beginPath();
+              ctx.moveTo(0, 0);
+              ctx.bezierCurveTo(-30 * bloomFactor, -pLength * 0.3, -40 * bloomFactor, -pLength * 0.8, 0, -pLength);
+              ctx.bezierCurveTo(40 * bloomFactor, -pLength * 0.8, 30 * bloomFactor, -pLength * 0.3, 0, 0);
+              ctx.closePath();
+              
+              const gradient = ctx.createLinearGradient(0, 0, 0, -pLength);
+              gradient.addColorStop(0, '#fff'); // Blinding white core
+              gradient.addColorStop(0.2, `hsla(${f.colorHue}, 100%, 70%, ${layerAlpha})`); // Vivid color
+              gradient.addColorStop(1, `hsla(${f.colorHue + 30}, 100%, 50%, 0)`); // Dissolve to transparent neon edge
+              
+              ctx.fillStyle = gradient;
+              ctx.shadowBlur = 20 * bloomFactor;
+              ctx.shadowColor = `hsl(${f.colorHue}, 100%, 50%)`;
+              ctx.fill();
+              
+              // Energy filament in petal center
+              ctx.beginPath();
+              ctx.moveTo(0, 0);
+              ctx.lineTo(0, -pLength * (0.6 + 0.4 * energyPulse));
+              ctx.strokeStyle = `hsla(255, 255%, 255%, ${0.5 + 0.5 * bloomFactor})`;
+              ctx.lineWidth = layer === 0 ? 1 : 2;
+              ctx.stroke();
+              
+              ctx.restore();
+            }
         }
         
+        // Super bright glowing orb in the center
+        ctx.beginPath();
+        ctx.arc(0, 0, (5 + 15 * bloomFactor) * (1 + 0.2 * energyPulse), 0, Math.PI * 2);
+        ctx.fillStyle = '#fff';
+        ctx.shadowBlur = 50;
+        ctx.shadowColor = `hsl(${f.colorHue}, 100%, 60%)`;
+        ctx.fill();
         ctx.restore();
       }
     }
     
+    // Draw and update particles
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+       let p = this.particles[i];
+       p.x += p.vx;
+       p.y += p.vy;
+       p.vy -= 0.1; // gravity floats up
+       p.life -= 0.02;
+       
+       if (p.life <= 0) {
+          this.particles.splice(i, 1);
+          continue;
+       }
+       
+       ctx.beginPath();
+       ctx.arc(p.x, p.y, 3 * p.life, 0, Math.PI * 2);
+       ctx.fillStyle = `hsla(${p.hue}, 100%, 70%, ${p.life})`;
+       ctx.shadowBlur = 10;
+       ctx.shadowColor = `hsl(${p.hue}, 100%, 50%)`;
+       ctx.fill();
+    }
+    
     ctx.restore();
+    ctx.globalCompositeOperation = 'source-over'; // reset
   }
 }
