@@ -70,32 +70,47 @@ function enableCam() {
     return;
   }
 
+  // Detect if mobile
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  
   const constraints = {
     video: {
-      width: { ideal: 1280 },
-      height: { ideal: 720 },
+      width: { ideal: isMobile ? 640 : 1280 },
+      height: { ideal: isMobile ? 480 : 720 },
       facingMode: "user"
     }
   };
 
   navigator.mediaDevices.getUserMedia(constraints).then((stream) => {
     video.srcObject = stream;
-    video.addEventListener("loadeddata", predictWebcam);
+    video.addEventListener("loadeddata", () => {
+      handleResize();
+      predictWebcam();
+    });
     webcamRunning = true;
   }).catch((err) => {
     console.error("Error accessing webcam:", err);
-    debugDiv.innerText = "Webcam access denied or unavailable.";
+    debugDiv.innerText = "Webcam access denied. Please allow camera access.";
   });
 }
 
 function handleResize() {
-  const videoRect = video.getBoundingClientRect();
-  canvas.width = videoRect.width;
-  canvas.height = videoRect.height;
+  // Use the actual display size, accounting for device pixel ratio for sharp rendering
+  const dpr = Math.min(window.devicePixelRatio || 1, 2); // cap at 2x for performance
+  const displayWidth = window.innerWidth;
+  const displayHeight = window.innerHeight;
+  
+  canvas.width = displayWidth * dpr;
+  canvas.height = displayHeight * dpr;
+  canvas.style.width = displayWidth + 'px';
+  canvas.style.height = displayHeight + 'px';
+  
   flowerSystem.resize(canvas.width, canvas.height);
 }
 
 window.addEventListener('resize', handleResize);
+// Handle mobile orientation changes
+screen.orientation?.addEventListener?.('change', () => setTimeout(handleResize, 200));
 
 async function predictWebcam() {
   if (canvas.width !== video.getBoundingClientRect().width) {
@@ -187,6 +202,14 @@ function drawHUD() {
   
   ctx.save();
   
+  // Scale HUD elements based on screen size
+  const isMobileScreen = w < 800;
+  const dotRadius = isMobileScreen ? 6 : 8;
+  const dotInner = isMobileScreen ? 1.5 : 2;
+  const fontSize = isMobileScreen ? 12 : 15;
+  const pillPad = isMobileScreen ? 10 : 14;
+  const pillHeight = isMobileScreen ? 22 : 28;
+  
   for (let i = 0; i < handPositions.length; i++) {
     const hp = handPositions[i];
     const thumb = hp.thumb;
@@ -202,7 +225,7 @@ function drawHUD() {
     ctx.moveTo(tx, ty);
     ctx.lineTo(ix, iy);
     ctx.strokeStyle = i === 0 ? 'rgba(100, 200, 255, 0.5)' : 'rgba(255, 150, 200, 0.5)';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = isMobileScreen ? 1.5 : 2;
     ctx.setLineDash([6, 6]);
     ctx.stroke();
     ctx.setLineDash([]);
@@ -211,12 +234,12 @@ function drawHUD() {
     const color = i === 0 ? 'rgba(100, 200, 255, 0.8)' : 'rgba(255, 150, 200, 0.8)';
     const drawDot = (x, y) => {
       ctx.beginPath();
-      ctx.arc(x, y, 8, 0, Math.PI * 2);
+      ctx.arc(x, y, dotRadius, 0, Math.PI * 2);
       ctx.strokeStyle = color;
       ctx.lineWidth = 1.5;
       ctx.stroke();
       ctx.beginPath();
-      ctx.arc(x, y, 2, 0, Math.PI * 2);
+      ctx.arc(x, y, dotInner, 0, Math.PI * 2);
       ctx.fillStyle = '#fff';
       ctx.fill();
     };
@@ -227,9 +250,9 @@ function drawHUD() {
     const val = hp.value.toFixed(2);
     const label = i === 0 ? "🌱 Grow" : "🌸 Bloom";
     const midX = (tx + ix) / 2;
-    const midY = (ty + iy) / 2 - 20;
+    const midY = (ty + iy) / 2 - (isMobileScreen ? 14 : 20);
     
-    ctx.font = 'bold 15px "Segoe UI", sans-serif';
+    ctx.font = `bold ${fontSize}px "Segoe UI", -apple-system, sans-serif`;
     ctx.textAlign = 'center';
     
     // Background pill
@@ -237,11 +260,11 @@ function drawHUD() {
     const pillBg = i === 0 ? 'rgba(0, 30, 60, 0.7)' : 'rgba(40, 0, 30, 0.7)';
     ctx.fillStyle = pillBg;
     ctx.beginPath();
-    ctx.roundRect(midX - textWidth/2 - 14, midY - 14, textWidth + 28, 28, 14);
+    ctx.roundRect(midX - textWidth/2 - pillPad, midY - pillHeight/2, textWidth + pillPad * 2, pillHeight, pillHeight/2);
     ctx.fill();
     
     ctx.fillStyle = '#fff';
-    ctx.fillText(`${label}: ${val}`, midX, midY + 5);
+    ctx.fillText(`${label}: ${val}`, midX, midY + fontSize * 0.2);
   }
   
   ctx.restore();
