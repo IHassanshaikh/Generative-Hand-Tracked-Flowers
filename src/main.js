@@ -20,6 +20,7 @@ const flowerSystem = new FlowerSystem(canvas);
 
 let currentGrow = 0;
 let currentBloom = 0;
+let currentColorShift = 0;
 let handPositions = [];
 
 // Initialize MediaPipe HandLandmarker
@@ -48,6 +49,18 @@ function calculateDistance(lm1, lm2) {
   const dy = lm1.y - lm2.y;
   const dz = lm1.z - lm2.z;
   return Math.sqrt(dx * dx + dy * dy + dz * dz);
+}
+
+// Calculate hand openness (all fingers spread vs fist) for extra control
+function calculateHandOpenness(landmarks) {
+  // Average distance of all fingertips from palm center
+  const palmCenter = landmarks[9]; // middle finger base
+  const fingertips = [landmarks[4], landmarks[8], landmarks[12], landmarks[16], landmarks[20]];
+  let totalDist = 0;
+  for (const tip of fingertips) {
+    totalDist += calculateDistance(palmCenter, tip);
+  }
+  return Math.min(1, (totalDist / 5 - 0.05) / 0.2);
 }
 
 // Enable webcam
@@ -97,6 +110,7 @@ async function predictWebcam() {
     
     let targetGrow = 0;
     let targetBloom = 0;
+    let targetColorShift = currentColorShift;
     handPositions = [];
 
     if (results.landmarks && results.landmarks.length > 0) {
@@ -105,23 +119,26 @@ async function predictWebcam() {
          
          const thumbTip = landmarks[4];
          const indexTip = landmarks[8];
-         const wrist = landmarks[0];
-         const middleTip = landmarks[12];
          
          const distance = calculateDistance(thumbTip, indexTip);
          const normalizedVal = Math.max(0, Math.min(1, (distance - 0.03) / 0.25));
+         
+         // Extra control: hand openness affects color shift
+         const openness = calculateHandOpenness(landmarks);
 
-         // Save hand position data for flower rendering
+         // Save hand position data for HUD rendering
          handPositions.push({
-           wrist: wrist,
-           middle: middleTip,
            thumb: thumbTip,
            index: indexTip,
-           value: normalizedVal
+           wrist: landmarks[0],
+           value: normalizedVal,
+           openness: openness
          });
 
+         // Hand 1 = Grow (stem height), Hand 2 = Bloom (petal opening)
          if (i === 0) {
            targetGrow = normalizedVal;
+           targetColorShift = openness; // spread all fingers to shift flower colors!
          } else if (i === 1) {
            targetBloom = normalizedVal;
          }
@@ -136,19 +153,25 @@ async function predictWebcam() {
     // Smoothly interpolate values for fluid animation
     currentGrow += (targetGrow - currentGrow) * 0.08;
     currentBloom += (targetBloom - currentBloom) * 0.08;
+    currentColorShift += (targetColorShift - currentColorShift) * 0.05;
   }
 
-  // Draw generative flowers, passing hand positions so flowers grow from hands
-  flowerSystem.draw(currentGrow, currentBloom, handPositions);
+  // Draw the bouquet of flowers controlled by hand gestures
+  flowerSystem.draw(currentGrow, currentBloom, handPositions, currentColorShift);
 
   // Draw tracking HUD overlay
   drawHUD();
 
   // Update debug info
   if (handPositions.length > 0) {
-    debugDiv.innerText = `Grow: ${currentGrow.toFixed(2)} | Bloom: ${currentBloom.toFixed(2)} | Hands: ${handPositions.length}`;
+    let info = `🌱 Grow: ${currentGrow.toFixed(2)} | 🌸 Bloom: ${currentBloom.toFixed(2)}`;
+    if (handPositions.length === 2) {
+      info += ` | 🎨 Color: ${(currentColorShift * 100).toFixed(0)}%`;
+    }
+    info += ` | ✋ Hands: ${handPositions.length}`;
+    debugDiv.innerText = info;
   } else {
-    debugDiv.innerText = "Show your hands and pinch/spread fingers 🌸";
+    debugDiv.innerText = "Show your hands 🌸 Hand 1 = Grow | Hand 2 = Bloom | Spread fingers = Color shift";
   }
 
   if (webcamRunning === true) {
@@ -178,17 +201,18 @@ function drawHUD() {
     ctx.beginPath();
     ctx.moveTo(tx, ty);
     ctx.lineTo(ix, iy);
-    ctx.strokeStyle = 'rgba(100, 200, 255, 0.5)';
+    ctx.strokeStyle = i === 0 ? 'rgba(100, 200, 255, 0.5)' : 'rgba(255, 150, 200, 0.5)';
     ctx.lineWidth = 2;
     ctx.setLineDash([6, 6]);
     ctx.stroke();
     ctx.setLineDash([]);
     
     // Small circles at fingertips
+    const color = i === 0 ? 'rgba(100, 200, 255, 0.8)' : 'rgba(255, 150, 200, 0.8)';
     const drawDot = (x, y) => {
       ctx.beginPath();
       ctx.arc(x, y, 8, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(100, 200, 255, 0.8)';
+      ctx.strokeStyle = color;
       ctx.lineWidth = 1.5;
       ctx.stroke();
       ctx.beginPath();
@@ -201,18 +225,19 @@ function drawHUD() {
     
     // Value label
     const val = hp.value.toFixed(2);
-    const label = i === 0 ? "Grow" : "Bloom";
+    const label = i === 0 ? "🌱 Grow" : "🌸 Bloom";
     const midX = (tx + ix) / 2;
     const midY = (ty + iy) / 2 - 20;
     
-    ctx.font = 'bold 16px "Segoe UI", sans-serif';
+    ctx.font = 'bold 15px "Segoe UI", sans-serif';
     ctx.textAlign = 'center';
     
     // Background pill
     const textWidth = ctx.measureText(`${label}: ${val}`).width;
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    const pillBg = i === 0 ? 'rgba(0, 30, 60, 0.7)' : 'rgba(40, 0, 30, 0.7)';
+    ctx.fillStyle = pillBg;
     ctx.beginPath();
-    ctx.roundRect(midX - textWidth/2 - 12, midY - 14, textWidth + 24, 28, 14);
+    ctx.roundRect(midX - textWidth/2 - 14, midY - 14, textWidth + 28, 28, 14);
     ctx.fill();
     
     ctx.fillStyle = '#fff';

@@ -230,7 +230,7 @@ export class FlowerSystem {
     });
   }
 
-  draw(growFactor, bloomFactor, handPositions) {
+  draw(growFactor, bloomFactor, handPositions, colorShift) {
     const { ctx, canvas } = this;
     const time = Date.now() / 1000;
     
@@ -239,70 +239,56 @@ export class FlowerSystem {
     const w = canvas.width;
     const h = canvas.height;
     
-    // If no hand positions provided, use defaults spread across the bottom
-    let flowerSources = [];
-    if (handPositions && handPositions.length > 0) {
-      // Grow flowers from each detected hand
-      for (const hp of handPositions) {
-        // Use the wrist (landmark 0) as the base, and middle finger tip (12) as target
-        const wristX = hp.wrist.x * w;
-        const wristY = hp.wrist.y * h;
-        const middleX = hp.middle.x * w;
-        const middleY = hp.middle.y * h;
-        
-        flowerSources.push({
-          startX: wristX,
-          startY: wristY,
-          endX: middleX,
-          endY: middleY,
-          hue: 340 + Math.random() * 0 // consistent red/pink per render
-        });
-      }
-    } else {
-      // Default flowers from bottom
-      const numFlowers = 5;
-      for (let i = 0; i < numFlowers; i++) {
-        const bx = w * (0.15 + (i / numFlowers) * 0.7);
-        const sway = Math.sin(time * 0.02 + i * 1.5) * 60 * growFactor;
-        const targetH = h * (0.35 + Math.random() * 0.0001) * growFactor;
-        
-        flowerSources.push({
-          startX: bx,
-          startY: h + 30,
-          endX: bx + sway,
-          endY: h + 30 - targetH,
-          hue: 330 + (i * 15) % 60
-        });
-      }
-    }
+    const hueShift = (colorShift || 0) * 120; // shift hue based on hand distance
+    
+    // Always show a bouquet of flowers from the bottom (like the reference video)
+    const flowerConfigs = [
+      { xPct: 0.08, heightPct: 0.55, swaySeed: 0.5,  swayAmp: 40,  hue: 345, delay: 0 },
+      { xPct: 0.18, heightPct: 0.70, swaySeed: 1.2,  swayAmp: 55,  hue: 335, delay: 0.05 },
+      { xPct: 0.30, heightPct: 0.60, swaySeed: 2.0,  swayAmp: 35,  hue: 350, delay: 0.08 },
+      { xPct: 0.42, heightPct: 0.80, swaySeed: 3.1,  swayAmp: 50,  hue: 320, delay: 0.03 },
+      { xPct: 0.55, heightPct: 0.65, swaySeed: 4.5,  swayAmp: 45,  hue: 340, delay: 0.10 },
+      { xPct: 0.68, heightPct: 0.75, swaySeed: 5.8,  swayAmp: 55,  hue: 355, delay: 0.02 },
+      { xPct: 0.80, heightPct: 0.58, swaySeed: 6.7,  swayAmp: 40,  hue: 310, delay: 0.07 },
+      { xPct: 0.92, heightPct: 0.68, swaySeed: 7.9,  swayAmp: 50,  hue: 330, delay: 0.06 },
+    ];
     
     // Draw each flower
-    for (let fi = 0; fi < flowerSources.length; fi++) {
-      const f = flowerSources[fi];
-      const hue = fi === 0 ? 345 : 320; // Red for first, pink-magenta for second
+    for (let fi = 0; fi < flowerConfigs.length; fi++) {
+      const cfg = flowerConfigs[fi];
       
-      const dx = f.endX - f.startX;
-      const dy = f.endY - f.startY;
-      const dist = Math.sqrt(dx*dx + dy*dy);
+      // Staggered grow — flowers don't all appear at once
+      const localGrow = Math.max(0, Math.min(1, (growFactor - cfg.delay) / (1 - cfg.delay)));
+      if (localGrow < 0.01) continue;
       
-      if (dist < 5 || growFactor < 0.01) continue;
+      const startX = w * cfg.xPct;
+      const startY = h + 40;
       
-      // Control points for a natural curved stem
-      const cp1X = f.startX;
-      const cp1Y = f.startY + dy * 0.3;
-      const cp2X = f.endX - dx * 0.3;
-      const cp2Y = f.endY - dy * 0.2;
+      const targetH = h * cfg.heightPct * localGrow;
+      const sway = Math.sin(time * 0.8 + cfg.swaySeed) * cfg.swayAmp * localGrow;
+      
+      const endX = startX + sway;
+      const endY = startY - targetH;
+      
+      // Natural S-curve control points
+      const cp1X = startX + sway * 0.2;
+      const cp1Y = startY - targetH * 0.35;
+      const cp2X = endX - sway * 0.3;
+      const cp2Y = endY + targetH * 0.25;
+      
+      const hue = (cfg.hue + hueShift) % 360;
       
       // Draw stem
-      this.drawStem(ctx, f.startX, f.startY, f.endX, f.endY, cp1X, cp1Y, cp2X, cp2Y, growFactor, time);
+      this.drawStem(ctx, startX, startY, endX, endY, cp1X, cp1Y, cp2X, cp2Y, localGrow, time + cfg.swaySeed);
       
-      // Draw flower at the end
-      const flowerAngle = Math.atan2(dy, dx) - Math.PI / 2;
-      this.drawRose(ctx, f.endX, f.endY, bloomFactor, hue, time, flowerAngle * 0.3);
+      // Draw flower at the end — bloom is staggered per flower too
+      const localBloom = Math.max(0, Math.min(1, (bloomFactor - cfg.delay * 0.5) / (1 - cfg.delay * 0.5)));
+      const flowerAngle = Math.sin(time * 0.3 + cfg.swaySeed) * 0.15; // gentle tilt
+      this.drawRose(ctx, endX, endY, localBloom, hue, time, flowerAngle);
       
       // Emit falling petals when in full bloom
-      if (bloomFactor > 0.6) {
-        this.emitFallingPetal(f.endX, f.endY, hue);
+      if (localBloom > 0.6) {
+        this.emitFallingPetal(endX, endY, hue);
       }
     }
     
