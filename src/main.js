@@ -63,30 +63,50 @@ function calculateHandOpenness(landmarks) {
   return Math.min(1, (totalDist / 5 - 0.05) / 0.2);
 }
 
-// Enable webcam
+// Track the current stream so we can stop it on re-init
+let currentStream = null;
+let predictionStarted = false;
+
+// Enable webcam (or restart it on orientation change)
 function enableCam() {
   if (!handLandmarker) {
     console.log("Wait! Hand landmarker not loaded yet.");
     return;
   }
 
+  // Stop any existing stream tracks before acquiring a new one
+  if (currentStream) {
+    currentStream.getTracks().forEach(track => track.stop());
+    currentStream = null;
+  }
+
   // Detect if mobile
   const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  
+
+  // Use the current viewport dimensions to pick the best camera resolution
+  const vpWidth = window.innerWidth;
+  const vpHeight = window.innerHeight;
+  const isLandscape = vpWidth > vpHeight;
+
   const constraints = {
     video: {
-      width: { ideal: isMobile ? 640 : 1280 },
-      height: { ideal: isMobile ? 480 : 720 },
+      width:  { ideal: isMobile ? (isLandscape ? 640 : 480) : 1280 },
+      height: { ideal: isMobile ? (isLandscape ? 480 : 640) : 720 },
       facingMode: "user"
     }
   };
 
   navigator.mediaDevices.getUserMedia(constraints).then((stream) => {
+    currentStream = stream;
     video.srcObject = stream;
     video.addEventListener("loadeddata", () => {
       handleResize();
-      predictWebcam();
-    });
+      // Only start the prediction loop once
+      if (!predictionStarted) {
+        predictionStarted = true;
+        predictWebcam();
+      }
+    }, { once: true });
     webcamRunning = true;
   }).catch((err) => {
     console.error("Error accessing webcam:", err);
@@ -108,9 +128,22 @@ function handleResize() {
   flowerSystem.resize(canvas.width, canvas.height);
 }
 
+// Debounced camera restart for orientation changes
+let orientationTimeout = null;
+function handleOrientationChange() {
+  clearTimeout(orientationTimeout);
+  orientationTimeout = setTimeout(() => {
+    handleResize();
+    // Re-acquire the camera so the stream matches the new orientation
+    enableCam();
+  }, 300);
+}
+
 window.addEventListener('resize', handleResize);
-// Handle mobile orientation changes
-screen.orientation?.addEventListener?.('change', () => setTimeout(handleResize, 200));
+// Handle mobile orientation changes — restart camera to get correct stream dimensions
+screen.orientation?.addEventListener?.('change', handleOrientationChange);
+// Fallback: some browsers/webviews fire this instead
+window.addEventListener('orientationchange', handleOrientationChange);
 
 async function predictWebcam() {
   if (canvas.width !== video.getBoundingClientRect().width) {
